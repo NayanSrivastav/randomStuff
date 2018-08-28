@@ -11,8 +11,6 @@ import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
-import org.openqa.selenium.remote.DesiredCapabilities;
-import org.openqa.selenium.remote.RemoteWebDriver;
 
 import java.io.IOException;
 import java.util.List;
@@ -21,44 +19,73 @@ import java.util.Objects;
 public class Selenium {
 
     public static void main(String[] args) throws IOException {
-//        System.setProperty("webdriver.chrome.driver", "/usr/local/bin/chromedriver");
-//
-//        ChromeOptions options = new ChromeOptions();
-//
-//        options.addArguments("headless");
-//        options.addArguments("window-size=1200x600");
-//        ChromeDriver driver = new ChromeDriver(options);
-        WebDriver driver = null;
-        try {
-            driver = WebDriverFactory.getDriver();
-            driver.get("https://www.domain.com.au/sold-listings/");
-            parseDomain(driver);
-        } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-            if (Objects.nonNull(driver)) {
-                driver.quit();
-            }
-        }
-//        int i = 1;
-//        do {
-//            driver.get("https://www.realestate.com.au/buy/list-" + (i++));
-//        } while (parse(driver));
+        System.setProperty("webdriver.chrome.driver", "/usr/local/bin/chromedriver");
+
+        ChromeDriver driver = getDriver();
+//        WebDriver driver = null;
+//        try {
+//            driver = WebDriverFactory.getDriver();
+//            driver.get("https://www.domain.com.au/sold-listings/");
+//            parseDomain(driver);
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//        } finally {
+//            if (Objects.nonNull(driver)) {
+//                driver.quit();
+//            }
+//        }
+        int i = 1;
+        do {
+            driver.get("https://www.realestate.com.au/sold/list-" + (i++));
+        } while (parse(driver));
+    }
+
+    static ChromeDriver getDriver() {
+        ChromeOptions options = new ChromeOptions();
+
+        options.addArguments("headless");
+        options.addArguments("window-size=1200x600");
+        return new ChromeDriver(options);
     }
 
     private static boolean parse(WebDriver driver) {
         if (hasData(driver)) {
-            WebElement results = driver.findElement(By.id("searchResultsTbl"));
-            Document doc = Jsoup.parse(results.getAttribute("innerHTML"));
-            doc.outputSettings().prettyPrint(true);
-            doc.outputSettings().syntax(Document.OutputSettings.Syntax.xml);
-            JSONObject table = XML.toJSONObject(doc.toString());
-            System.out.println(table.getJSONObject("html").getJSONObject("body").getJSONArray("article").toString());
+//            document.getElementsByClassName('details-link residential-card__details-link')
+            List<WebElement> results = driver.findElements(By.className("residential-card__address-heading"));
+            for (WebElement element : results) {
+                Document doc = Jsoup.parse(element.getAttribute("innerHTML"));
+                doc.outputSettings().prettyPrint(true);
+                doc.outputSettings().syntax(Document.OutputSettings.Syntax.xml);
+                JSONObject table = XML.toJSONObject(doc.toString());
+                String href = table.getJSONObject("html").getJSONObject("body").getJSONObject("a").getString("href");
+                parseRealState(href);
+            }
 
             return true;
         }
 
         return false;
+    }
+
+    private static void parseRealState(String link) {
+        link = "https://www.realestate.com.au" + link;
+        ChromeDriver driver = getDriver();
+        driver.get(link);
+        String street = driver.findElements(By.className("property-info-address__street")).get(0).getAttribute("innerText");
+        String address=driver.findElements(By.className("property-info-address__suburb")).get(0).getAttribute("innerText");
+        String amount = driver.findElement(By.id("reavicalc_calculator_mortgagerepayments_ad_unit_in_page_responsive_sold_uplift-fd_propertyPrice")).getAttribute("value");
+        PropertyDetails propertyDetails = new PropertyDetails();
+        String[] addressChunks = address.split(" ");
+        propertyDetails.setSuburbName(address);
+        propertyDetails.setStreetName(street);
+        propertyDetails.setPrice(amount);
+        if (addressChunks.length > 0) {
+            String postalCode = addressChunks[addressChunks.length - 1];
+            if (postalCode.matches("\\d+")) {
+                propertyDetails.setPostalCode(postalCode);
+            }
+        }
+
     }
 
     private static void parseDomain(WebDriver driver) {
